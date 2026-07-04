@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>イベント集計 / 後追い</title>
+<style>
+  :root{
+    --ink:#F1ECFF;
+    --ink-soft:#A99FC9;
+    --paper:#180C34;
+    --card:#26183F;
+    --line:rgba(255,255,255,.11);
+    --line-soft:rgba(255,255,255,.06);
+    --accent:#A855F7;
+    --accent-deep:#7C3AED;
+    --gold:#E0B44A;
+    --danger:#F87171;
+    --shadow:0 2px 6px rgba(0,0,0,.35),0 12px 34px rgba(88,28,135,.28);
+    --font-sans:-apple-system,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+    --font-serif:"Hiragino Mincho ProN","YuMincho",Georgia,"Times New Roman",serif;
+    --sat:env(safe-area-inset-top);
+    --sab:env(safe-area-inset-bottom);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--font-sans);
+    background:linear-gradient(160deg,#160B2E 0%,#1E1140 48%,#160B2E 100%);
+    background-attachment:fixed;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+    overscroll-behavior-y:contain;
+    min-height:100vh;
+  }
+  body::before{
+    content:"";position:fixed;inset:-25%;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(closest-side,rgba(168,85,247,.40),transparent) 8% 12%/48% 48% no-repeat,
+      radial-gradient(closest-side,rgba(56,189,248,.24),transparent) 92% 8%/42% 42% no-repeat,
+      radial-gradient(closest-side,rgba(236,72,153,.26),transparent) 62% 98%/52% 52% no-repeat;
+    filter:blur(34px);
+    animation:drift 20s ease-in-out infinite alternate;
+  }
+  @keyframes drift{from{transform:translate3d(0,0,0) scale(1);}to{transform:translate3d(0,-4%,0) scale(1.1);}}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+  input,select,textarea{font-family:inherit;font-size:16px;color:var(--ink);}
+  ::placeholder{color:var(--ink-soft);opacity:.65;}
+
+  /* ---------- Header ---------- */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:rgba(22,11,46,.72);
+    backdrop-filter:saturate(1.6) blur(14px);
+    -webkit-backdrop-filter:saturate(1.6) blur(14px);
+    border-bottom:1px solid var(--line);
+    padding:calc(var(--sat) + 14px) 20px 0;
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  .mark{
+    width:20px;height:20px;flex:none;transform:rotate(45deg);border-radius:4px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-deep));
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.3),0 0 14px rgba(168,85,247,.7);
+  }
+  .brand h1{font-size:17px;font-weight:700;letter-spacing:.02em;margin:0;}
+  .brand .sub{font-size:11px;color:var(--ink-soft);letter-spacing:.16em;font-weight:600;text-transform:uppercase;margin-left:auto;}
+  nav.tabs{display:flex;gap:4px;margin-top:12px;}
+  nav.tabs button{
+    flex:1;padding:11px 8px;font-size:14px;font-weight:600;color:var(--ink-soft);
+    border-radius:10px 10px 0 0;position:relative;transition:color .15s;
+  }
+  nav.tabs button.on{color:var(--ink);}
+  nav.tabs button.on::after{
+    content:"";position:absolute;left:14px;right:14px;bottom:0;height:2.5px;border-radius:2px;background:var(--accent);
+  }
+
+  main{max-width:720px;margin:0 auto;padding:18px 16px calc(120px + var(--sab));}
+
+  /* ---------- Stat strip ---------- */
+  .strip{display:flex;gap:10px;margin-bottom:20px;}
+  .stat{
+    flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);
+  }
+  .stat .n{font-family:var(--font-serif);font-size:28px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;}
+  .stat .l{font-size:11px;color:var(--ink-soft);margin-top:6px;letter-spacing:.06em;font-weight:600;}
+
+  section.block{margin-bottom:26px;}
+  .block-head{display:flex;align-items:baseline;gap:10px;margin:0 4px 12px;}
+  .block-head h2{font-size:13px;font-weight:700;letter-spacing:.1em;margin:0;text-transform:uppercase;color:var(--ink);}
+  .block-head .jp{font-size:12px;color:var(--ink-soft);font-weight:600;}
+
+  /* ---------- Ranking ---------- */
+  .rank-list{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);}
+  .rank-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--line-soft);position:relative;}
+  .rank-row:last-child{border-bottom:none;}
+  .rank-num{font-family:var(--font-serif);font-size:22px;font-weight:600;color:#B9BECE;width:26px;text-align:center;font-variant-numeric:tabular-nums;flex:none;}
+  .rank-row.top1 .rank-num{color:var(--gold);}
+  .rank-num.medal{font-size:18px;}
+  .podium-wrap{margin-bottom:20px;}
+  .podium-title{font-size:12px;font-weight:800;letter-spacing:.08em;color:var(--ink-soft);margin:0 4px 12px;text-transform:uppercase;}
+  .podium{display:flex;align-items:flex-end;gap:10px;}
+  .pod-item{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;}
+  .pod-crown{font-size:26px;line-height:1;margin-bottom:5px;}
+  .pod-0 .pod-crown{font-size:34px;filter:drop-shadow(0 0 10px rgba(224,180,74,.7));}
+  .pod-name{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;margin-bottom:8px;color:var(--ink);}
+  .pod-ped{width:100%;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);}
+  .pod-count{font-family:var(--font-serif);font-size:22px;font-weight:600;color:#2A1D10;line-height:1;}
+  .pod-count span{font-size:11px;font-family:var(--font-sans);margin-left:1px;opacity:.7;}
+  .ped-0{height:78px;background:linear-gradient(180deg,#F0CE72,#D6A93F);border:1px solid #E9C766;}
+  .ped-1{height:56px;background:linear-gradient(180deg,#D8DCE6,#AEB4C4);border:1px solid #DDE1EC;}
+  .ped-2{height:44px;background:linear-gradient(180deg,#E1A877,#C1824F);border:1px solid #E8B98D;}
+  .rank-main{flex:1;min-width:0;}
+  .rank-name{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .rank-sub{font-size:11px;color:var(--ink-soft);margin-top:3px;font-weight:600;letter-spacing:.02em;}
+  .rank-bar{height:6px;border-radius:4px;background:var(--line);margin-top:8px;overflow:hidden;}
+  .rank-bar span{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent-deep));transition:width .5s cubic-bezier(.2,.8,.2,1);}
+  .rank-row.top1 .rank-bar span{background:linear-gradient(90deg,#D8B25A,var(--gold));}
+  .rank-count{font-family:var(--font-serif);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;flex:none;}
+  .rank-count small{font-size:11px;color:var(--ink-soft);font-family:var(--font-sans);margin-left:2px;}
+
+  /* ---------- Funnel ---------- */
+  .funnel{display:flex;flex-direction:column;gap:8px;}
+  .fn-row{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow);}
+  .fn-dot{width:10px;height:10px;border-radius:50%;flex:none;}
+  .fn-label{font-size:14px;font-weight:600;flex:none;min-width:52px;}
+  .fn-track{flex:1;height:8px;background:var(--line);border-radius:5px;overflow:hidden;}
+  .fn-track span{display:block;height:100%;border-radius:5px;transition:width .5s cubic-bezier(.2,.8,.2,1);}
+  .fn-n{font-family:var(--font-serif);font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;min-width:24px;text-align:right;}
+
+  /* ---------- Filters ---------- */
+  .filter-scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 4px 10px;margin:0 -4px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .filter-scroll::-webkit-scrollbar{display:none;}
+  .chip{flex:none;padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--line);color:var(--ink-soft);white-space:nowrap;display:flex;align-items:center;gap:6px;}
+  .chip .cdot{width:8px;height:8px;border-radius:50%;}
+  .chip.on{background:var(--accent);color:#fff;border-color:transparent;box-shadow:0 0 14px rgba(168,85,247,.4);}
+  .search-wrap{margin:2px 0 14px;}
+  .search-wrap input{width:100%;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card);outline:none;}
+  .search-wrap input:focus{border-color:var(--accent);}
+
+  /* ---------- Person cards ---------- */
+  .people{display:flex;flex-direction:column;gap:11px;}
+  .p-card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px 13px 20px;box-shadow:var(--shadow);overflow:hidden;}
+  .p-card::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:0 4px 4px 0;background:var(--sc);}
+  .p-row1{display:flex;align-items:center;gap:10px;}
+  .p-name{font-size:16.5px;font-weight:700;letter-spacing:.01em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .p-pill{font-size:10.5px;font-weight:800;letter-spacing:.07em;color:var(--sc);border:1.5px solid var(--sc);padding:3px 11px;border-radius:999px;flex:none;background:var(--card);}
+  .p-event{font-size:12.5px;color:var(--ink-soft);margin-top:9px;display:flex;align-items:center;gap:7px;}
+  .p-event .ev-dot{width:7px;height:7px;border-radius:50%;background:var(--sc);flex:none;}
+  .p-event .tag{font-weight:600;}
+  .p-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px;}
+  .p-meta span{font-size:11.5px;color:var(--ink-soft);background:var(--line-soft);padding:3px 9px;border-radius:7px;}
+  .p-meta b{color:var(--ink);font-weight:700;}
+  .steps{display:flex;align-items:center;gap:4px;margin-top:13px;}
+  .steps .seg{flex:1;height:5px;border-radius:3px;background:var(--line);transition:background .45s ease,height .2s ease;}
+  .steps .seg.now{height:8px;}
+  .p-flow{font-size:11.5px;color:var(--ink-soft);margin-top:9px;font-weight:600;}
+  .p-flow b{color:var(--ink);font-weight:700;}
+  .p-flow .arw{color:var(--sc);font-weight:800;margin:0 3px;}
+  .p-flow .done-txt{color:var(--gold);font-weight:700;}
+  .p-memo{font-size:13px;color:var(--ink-soft);margin-top:11px;white-space:pre-wrap;padding-top:10px;border-top:1px solid var(--line-soft);}
+  .p-actions{display:flex;gap:8px;margin-top:13px;}
+  .p-actions button{padding:10px 12px;border-radius:10px;font-size:13px;font-weight:700;}
+  .p-actions .adv{flex:1;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;box-shadow:0 4px 16px rgba(168,85,247,.35);}
+  .p-actions .adv:disabled{background:var(--line-soft);color:var(--ink-soft);}
+  .p-actions .ic{width:66px;flex:none;background:var(--line-soft);color:var(--ink);}
+
+  .empty{text-align:center;color:var(--ink-soft);padding:48px 20px;font-size:14px;}
+  .empty .big{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+  .an-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow);margin-bottom:14px;}
+  .an-big{display:flex;flex-direction:column;gap:5px;margin-bottom:15px;}
+  .an-rate{font-family:var(--font-serif);font-size:42px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;color:var(--accent);}
+  .an-rate small{font-size:20px;margin-left:2px;}
+  .an-cap{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .th-label{font-size:11px;color:var(--ink-soft);font-weight:700;margin-bottom:8px;letter-spacing:.02em;}
+  .th-pick{display:flex;flex-wrap:wrap;gap:6px;}
+  .th{padding:7px 13px;border-radius:999px;border:1.5px solid var(--line);background:transparent;color:var(--ink-soft);font-size:12.5px;font-weight:700;}
+  .an-sub{font-size:12px;font-weight:700;color:var(--ink-soft);margin:16px 4px 10px;}
+  .drop-note{font-size:11.5px;color:var(--gold);font-weight:700;margin:-1px 0 7px 22px;}
+  .ai-empty{width:100%;padding:15px;margin-bottom:18px;border-radius:14px;border:1.5px dashed rgba(168,85,247,.5);background:rgba(168,85,247,.08);color:#D6BBFF;font-weight:700;font-size:14px;}
+  .ai-card{position:relative;margin-bottom:18px;padding:15px 16px;border-radius:16px;background:linear-gradient(180deg,rgba(168,85,247,.16),rgba(168,85,247,.06));border:1px solid rgba(168,85,247,.4);box-shadow:0 6px 22px rgba(124,58,237,.22);}
+  .ai-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .ai-badge{font-size:12px;font-weight:800;color:#E6D2FF;letter-spacing:.03em;}
+  .ai-date{font-size:11px;color:var(--ink-soft);}
+  .ai-edit{margin-left:auto;font-size:12px;font-weight:700;color:#D6BBFF;background:rgba(255,255,255,.08);padding:5px 12px;border-radius:8px;}
+  .ai-body{font-size:14px;line-height:1.7;color:var(--ink);}
+  #aiText{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);outline:none;min-height:170px;resize:vertical;line-height:1.7;}
+  #aiText:focus{border-color:var(--accent);}
+  .sync-dot{width:9px;height:9px;border-radius:50%;background:#6b7280;display:inline-block;flex:none;}
+  .sync-dot.on{background:#3FC0B0;box-shadow:0 0 8px #3FC0B0;}
+  .sync-dot.connecting{background:var(--gold);}
+  .sync-dot.err{background:var(--danger);}
+  .sync-dot.off{background:#6b7280;}
+  #syncHeadDot{margin-left:auto;}
+  header .gear{margin-left:12px;}
+  .sync-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;}
+  .sync-title{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;margin-bottom:4px;}
+  .sync-status-line{font-size:12px;color:var(--ink-soft);margin:0 0 12px 17px;font-weight:600;}
+  .sync-box input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);outline:none;margin-bottom:8px;font-size:14px;}
+  .sync-box input:focus{border-color:var(--accent);}
+  .sync-actions{display:flex;gap:8px;margin-top:2px;}
+  .sync-connect{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;}
+  .sync-dis{padding:12px 16px;border-radius:10px;font-size:14px;font-weight:700;background:var(--line-soft);color:var(--ink);}
+
+  /* ---------- FAB ---------- */
+  .fab{
+    position:fixed;right:calc(50% - 360px + 20px);bottom:calc(22px + var(--sab));z-index:30;
+    width:58px;height:58px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;
+    font-size:30px;font-weight:300;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 8px 30px rgba(168,85,247,.5),0 0 0 1px rgba(255,255,255,.08) inset;
+  }
+  @media(max-width:760px){.fab{right:20px;}}
+  .fab:active{transform:scale(.94);}
+
+  /* ---------- Sheet / modal ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(8,3,20,.62);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(2px);}
+  .scrim.show{opacity:1;pointer-events:auto;}
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:41;max-width:560px;margin:0 auto;
+    background:var(--paper);border-radius:22px 22px 0 0;padding:8px 20px calc(24px + var(--sab));
+    transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+    max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  }
+  .sheet.show{transform:translateY(0);}
+  .grab{width:40px;height:4px;border-radius:3px;background:var(--line);margin:8px auto 14px;}
+  .sheet h3{font-size:18px;font-weight:700;margin:0 0 18px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:7px;letter-spacing:.04em;}
+  .field input[type=text],.field textarea,.field input:not([type]){width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:11px;background:var(--card);outline:none;}
+  .field input:focus,.field textarea:focus{border-color:var(--accent);}
+  .field textarea{resize:vertical;min-height:64px;}
+  .field.two{display:flex;gap:10px;}
+  .field.two>div{flex:1;}
+  .status-pick{display:flex;flex-wrap:wrap;gap:8px;}
+  .status-pick button{padding:10px 16px;border-radius:10px;font-size:14px;font-weight:600;background:var(--card);border:1.5px solid var(--line);color:var(--ink-soft);}
+  .status-pick button.on{color:#fff;border-color:transparent;}
+  .sheet-actions{display:flex;gap:10px;margin-top:8px;}
+  .btn{flex:1;padding:15px;border-radius:13px;font-size:15px;font-weight:700;text-align:center;}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-deep));color:#fff;box-shadow:0 6px 20px rgba(168,85,247,.4);}
+  .btn-ghost{background:var(--card);border:1px solid var(--line);color:var(--ink);flex:none;padding:15px 20px;}
+  .btn-danger{background:transparent;color:var(--danger);font-weight:600;font-size:14px;width:100%;padding:14px;margin-top:4px;}
+
+  /* status editor */
+  .st-item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:8px 10px;margin-bottom:8px;}
+  .st-item .sdot{width:12px;height:12px;border-radius:50%;flex:none;}
+  .st-item input{flex:1;border:none;background:transparent;padding:6px 2px;outline:none;font-weight:600;}
+  .st-item .mv{width:34px;height:34px;border-radius:8px;background:var(--line-soft);color:var(--ink-soft);font-size:16px;display:flex;align-items:center;justify-content:center;flex:none;}
+  .st-item .mv:disabled{opacity:.3;}
+  .st-item .del{width:34px;height:34px;color:var(--danger);flex:none;font-size:18px;}
+  .add-status{width:100%;padding:12px;border:1.5px dashed rgba(168,85,247,.5);border-radius:11px;color:#D6BBFF;font-weight:700;font-size:14px;margin-top:4px;}
+  .share-btn{width:100%;padding:15px;border-radius:13px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-deep));box-shadow:0 6px 22px rgba(168,85,247,.4);}
+  .util-row{display:flex;gap:10px;margin-top:20px;}
+  .util-row button{flex:1;padding:12px;border-radius:11px;background:var(--card);border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--ink);}
+  .gear{margin-left:auto;background:none;border:none;font-size:20px;color:var(--ink-soft);padding:0 0 0 8px;}
+
+  .bulk-link{width:100%;text-align:left;padding:12px 14px;margin-bottom:18px;border-radius:11px;background:rgba(168,85,247,.15);color:#D6BBFF;font-weight:700;font-size:13.5px;border:1px solid rgba(168,85,247,.4);}
+  .bulk-hint{font-size:12.5px;color:var(--ink-soft);line-height:1.7;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:14px;}
+  .bulk-hint code{font-family:ui-monospace,monospace;background:var(--line-soft);padding:1px 5px;border-radius:4px;font-size:12px;}
+  #bulkText{width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:11px;background:var(--card);outline:none;min-height:150px;resize:vertical;line-height:1.7;}
+  #bulkText:focus{border-color:var(--accent);}
+  .bulk-prev{margin:14px 0 4px;}
+  .prev-ev{font-size:12.5px;color:var(--ink-soft);background:var(--line-soft);border:1px solid var(--line);border-radius:9px;padding:8px 11px;margin-bottom:8px;}
+  .prev-ev b{color:var(--ink);}
+  .bulk-prev-head{font-size:12px;font-weight:700;color:var(--ink-soft);margin-bottom:8px;}
+  .prev-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line-soft);font-size:13px;}
+  .prev-row .pp{font-size:10px;font-weight:700;color:#fff;padding:2px 8px;border-radius:999px;flex:none;}
+  .prev-row .pn{font-weight:600;}
+  .prev-row .pe{color:var(--ink-soft);margin-left:auto;font-size:12px;}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="mark"></div>
+    <h1>イベント集計</h1>
+    <span class="sync-dot off" id="syncHeadDot" title="同期状態"></span>
+    <button class="gear" id="gearBtn" aria-label="設定">⚙︎</button>
+  </div>
+  <nav class="tabs">
+    <button id="tabDash" class="on" onclick="switchTab('dash')">集計</button>
+    <button id="tabList" onclick="switchTab('list')">後追い</button>
+    <button id="tabAnalysis" onclick="switchTab('analysis')">分析</button>
+  </nav>
+</header>
+
+<main>
+  <div id="viewDash"></div>
+  <div id="viewList" style="display:none"></div>
+  <div id="viewAnalysis" style="display:none"></div>
+</main>
+
+<button class="fab" onclick="openForm()" aria-label="追加">＋</button>
+
+<!-- add / edit sheet -->
+<div class="scrim" id="scrim" onclick="closeSheets()"></div>
+<div class="sheet" id="formSheet">
+  <div class="grab"></div>
+  <h3 id="formTitle">人を追加</h3>
+  <button id="bulkLink" class="bulk-link" onclick="openBulk()">📋 写真・リストからまとめて取り込む →</button>
+  <div class="field">
+    <label>名前（来た人）</label>
+    <input type="text" id="fName" placeholder="例）ひとみ" autocomplete="off">
+  </div>
+  <div class="field">
+    <label>どのイベント？</label>
+    <input type="text" id="fEvent" list="eventList" placeholder="例）6/19 BBQ イベント" autocomplete="off">
+    <datalist id="eventList"></datalist>
+  </div>
+  <div class="field two">
+    <div><label>誘った人</label><input type="text" id="fInviter" placeholder="例）中尾" autocomplete="off"></div>
+    <div><label>担当</label><input type="text" id="fHandler" placeholder="例）岩本" autocomplete="off"></div>
+  </div>
+  <div class="field">
+    <label>ステータス</label>
+    <div class="status-pick" id="fStatus"></div>
+  </div>
+  <div class="field">
+    <label>後追いメモ（任意）</label>
+    <textarea id="fMemo" placeholder="例）PG→CT取り中"></textarea>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn-ghost" onclick="closeSheets()">やめる</button>
+    <button class="btn btn-primary" onclick="savePerson()">保存</button>
+  </div>
+  <button class="btn-danger" id="deleteBtn" style="display:none" onclick="deleteCurrent()">この人を削除</button>
+</div>
+
+<!-- settings sheet -->
+<div class="sheet" id="setSheet">
+  <div class="grab"></div>
+  <h3>共有・設定</h3>
+  <div class="sync-box">
+    <div class="sync-title"><span class="sync-dot off" id="syncDot"></span>クラウド同期（全BAリアルタイム共有）</div>
+    <div class="sync-status-line" id="syncStatus">未接続</div>
+    <input id="syncUrl" type="text" placeholder="Project URL (https://xxxx.supabase.co)" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input id="syncKey" type="text" placeholder="anon public キー" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <input id="syncRoom" type="text" placeholder="ルーム名（例：clavis）" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div class="sync-actions">
+      <button class="sync-connect" onclick="connectSync()">接続する</button>
+      <button class="sync-dis" onclick="disconnectSync()">切断</button>
+    </div>
+    <button class="share-btn" style="margin-top:10px;" onclick="shareSyncLink()">🔗 BAに参加リンクを送る</button>
+  </div>
+  <button class="share-btn" onclick="shareLink()">🔗 スナップショットを共有（サーバー不要）</button>
+  <p style="font-size:12px;color:var(--ink-soft);margin:8px 2px 20px;">クラウド同期＝全員が同じボードを編集しリアルタイム反映。スナップショット＝今の状態をリンクで配布（一方向）。</p>
+  <h3 style="font-size:15px;">ステータス設定</h3>
+  <p style="font-size:12.5px;color:var(--ink-soft);margin:-8px 0 16px;">名前の変更・並べ替え・追加ができます。左が最初、下にいくほど後の段階です。</p>
+  <div id="stEditor"></div>
+  <button class="add-status" onclick="addStatus()">＋ ステータスを追加</button>
+  <button class="add-status" style="margin-top:8px;border-style:solid;border-color:rgba(168,85,247,.5);" onclick="applyDefaultFlow()">↻ 最新の流れに更新（イベント動員→…→BPC）</button>
+  <div class="util-row">
+    <button onclick="exportData()">バックアップ書き出し</button>
+    <button onclick="document.getElementById('importFile').click()">読み込み</button>
+  </div>
+  <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+  <div class="sheet-actions" style="margin-top:16px;">
+    <button class="btn btn-primary" onclick="closeSheets()">完了</button>
+  </div>
+</div>
+
+<!-- incoming shared data sheet -->
+<div class="sheet" id="shareInSheet">
+  <div class="grab"></div>
+  <h3>共有データが届いています</h3>
+  <div class="bulk-hint" id="shareInSummary" style="margin-bottom:18px;"></div>
+  <p style="font-size:12px;color:var(--ink-soft);margin:-6px 2px 16px;">「取り込む」を選ぶと、今この端末のデータは共有データに置き換わります。まず中身を見たいときは「見るだけ」を。</p>
+  <div class="sheet-actions">
+    <button class="btn-ghost" onclick="applyShare(false)">見るだけ</button>
+    <button class="btn btn-primary" onclick="applyShare(true)">取り込む</button>
+  </div>
+  <button class="btn-danger" onclick="dismissShare()">キャンセル</button>
+</div>
+
+<!-- sync join sheet -->
+<div class="sheet" id="syncJoinSheet">
+  <div class="grab"></div>
+  <h3>チーム共有ボードに参加</h3>
+  <div class="bulk-hint">チームの集計ボードに接続します。接続後は全員の変更がリアルタイムで共有されます。<br><b>この端末の今のデータは共有ボードの内容に置き換わります。</b></div>
+  <div class="sheet-actions">
+    <button class="btn-ghost" onclick="dismissSyncJoin()">やめる</button>
+    <button class="btn btn-primary" onclick="acceptSync()">接続する</button>
+  </div>
+</div>
+
+<!-- AI counseling sheet -->
+<div class="sheet" id="aiSheet">
+  <div class="grab"></div>
+  <h3>✨ AIカウンセリングを貼り付け</h3>
+  <div class="bulk-hint">分析データをAI（このチャットなど）に相談して、返ってきたコメントをここに貼り付けます。共有リンクを送るとBAにも表示されます。</div>
+  <button class="share-btn" style="margin-bottom:14px;" onclick="copyAnalysis()">📋 相談用に分析データをコピー</button>
+  <textarea id="aiText" placeholder="AIからのアドバイスをここに貼り付け"></textarea>
+  <div class="sheet-actions" style="margin-top:8px;">
+    <button class="btn-ghost" onclick="closeSheets()">やめる</button>
+    <button class="btn btn-primary" onclick="saveAI()">保存</button>
+  </div>
+  <button class="btn-danger" id="aiClearBtn" style="display:none" onclick="clearAI()">コメントを消す</button>
+</div>
+
+<!-- bulk import sheet -->
+<div class="sheet" id="bulkSheet">
+  <div class="grab"></div>
+  <h3>まとめて取り込み</h3>
+  <div class="bulk-hint">
+    <b>ノート/LINEをそのまま貼り付けOK</b>。イベント名・<code>NA数/BA数/合計</code>・<code>誘った人→来た人 担当 CTフロー</code>を自動で読み取ります。取り込み前にプレビューで確認できます。
+  </div>
+  <div class="field" style="margin-bottom:12px;">
+    <label>このリストのイベント名（見出しが無いとき用・任意）</label>
+    <input type="text" id="bulkEvent" placeholder="例）6/19 BBQ イベント" autocomplete="off" oninput="previewBulk()">
+  </div>
+  <textarea id="bulkText" placeholder="6/19 BBQ イベント&#10;NA数 7人&#10;BA数 12人&#10;合計 19人&#10;&#10;誘った人 → 来た人  後追い&#10;中尾 → ひとみ  岩本 PG→CT取り中" oninput="previewBulk()"></textarea>
+  <div class="bulk-prev" id="bulkPrev"></div>
+  <div class="sheet-actions" style="margin-top:8px;">
+    <button class="btn-ghost" onclick="closeSheets()">やめる</button>
+    <button class="btn btn-primary" id="bulkCommit" onclick="commitBulk()">取り込む</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const KEY="eventTally_v1";
+const PALETTE=["#A6ADBD","#8B9AE6","#3FC0B0","#F0B15E","#54C98A","#C58BEA","#F07EA6","#63B7EE"];
+const DEFAULT={statuses:["イベント動員","CT1","CT2","興味づけ","FT","マケ","PG","DLR","EXP","PA","BPC"],people:[]};
+const STAGE_ORDER=["イベント動員","CT1","CT2","興味づけ","FT","マケ","PG","DLR","EXP","PA","BPC"];
+const STAGE_RE=/CT1|CT2|EXP|BPC|DLR|PA|PG|FT|マケ|CT/g;
+
+let state=load();
+let tab="dash";
+let editingId=null;
+let pickStatus=null;
+let filterStatus="all";
+let filterEvent="all";
+let searchText="";
+let analysisThreshold=null;
+
+function load(){
+  try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);return{statuses:o.statuses&&o.statuses.length?o.statuses:DEFAULT.statuses.slice(),people:o.people||[],eventMeta:o.eventMeta||{},aiComment:o.aiComment||null};}}catch(e){}
+  return{statuses:DEFAULT.statuses.slice(),people:[],eventMeta:{},aiComment:null};
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}if(typeof sync!=="undefined"&&sync.on&&!applyingRemote)schedulePush();}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function colorOf(status){const i=state.statuses.indexOf(status);return PALETTE[(i<0?0:i)%PALETTE.length];}
+function esc(s){return(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function stripEmoji(s){return(s||"").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\uFE0F\u200D]/gu,"").replace(/[ \t]+/g," ").trim();}
+function toHalf(s){return(s||"").replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0));}
+function numOf(s){const m=toHalf(s).match(/\d+/);return m?parseInt(m[0],10):null;}
+function lastStage(flow){const m=(flow||"").match(STAGE_RE);return m?m[m.length-1]:null;}
+function ensureStatus(s){
+  if(!s||state.statuses.includes(s))return;
+  const si=STAGE_ORDER.indexOf(s);
+  if(si<0){state.statuses.push(s);return;}
+  let ins=state.statuses.length;
+  for(let i=0;i<state.statuses.length;i++){const oi=STAGE_ORDER.indexOf(state.statuses[i]);if(oi>si){ins=i;break;}}
+  state.statuses.splice(ins,0,s);
+}
+
+/* ---------- tabs ---------- */
+function switchTab(t){
+  tab=t;
+  document.getElementById("tabDash").classList.toggle("on",t==="dash");
+  document.getElementById("tabList").classList.toggle("on",t==="list");
+  document.getElementById("tabAnalysis").classList.toggle("on",t==="analysis");
+  document.getElementById("viewDash").style.display=t==="dash"?"":"none";
+  document.getElementById("viewList").style.display=t==="list"?"":"none";
+  document.getElementById("viewAnalysis").style.display=t==="analysis"?"":"none";
+  render();
+}
+
+/* ---------- dashboard ---------- */
+function eventCounts(){
+  const m={};
+  state.people.forEach(p=>{const e=p.event||"（未設定）";m[e]=(m[e]||0)+1;});
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
+function eventsAgg(){
+  const map={};
+  state.people.forEach(p=>{const e=p.event||"（未設定）";(map[e]=map[e]||{head:0}).head++;});
+  Object.entries(state.eventMeta||{}).forEach(([e,m])=>{map[e]=Object.assign({head:0},map[e],{na:m.na,ba:m.ba,total:m.total});});
+  return Object.entries(map).map(([name,v])=>{
+    const hasMeta=v.na!=null||v.ba!=null||v.total!=null;
+    const total=v.total!=null?v.total:(hasMeta?((v.na||0)+(v.ba||0)):v.head);
+    return{name,na:v.na,ba:v.ba,total,head:v.head,hasMeta};
+  }).sort((a,b)=>b.total-a.total);
+}
+function statusCounts(){
+  return state.statuses.map(s=>[s,state.people.filter(p=>p.status===s).length]);
+}
+function podiumHTML(rows){
+  if(!rows.length)return "";
+  const top=rows.slice(0,3);
+  const order=top.length===3?[1,0,2]:(top.length===2?[0,1]:[0]);
+  const crown=["👑","🥈","🥉"];
+  let items="";
+  order.forEach(rank=>{
+    const r=top[rank];
+    items+=`<div class="pod-item pod-${rank}">
+      <div class="pod-crown">${crown[rank]}</div>
+      <div class="pod-name">${esc(r.k)}</div>
+      <div class="pod-ped ped-${rank}"><span class="pod-count">${r.c}<span>人</span></span></div>
+    </div>`;
+  });
+  return `<section class="podium-wrap"><div class="podium-title">🏆 動員ランキング TOP3</div><div class="podium">${items}</div></section>`;
+}
+function renderDash(){
+  const evs=eventsAgg();
+  const scs=statusCounts();
+  const maxEv=evs.length?Math.max(1,...evs.map(e=>e.total)):0;
+  const totalNA=evs.reduce((a,e)=>a+(e.na||0),0);
+  const invMap={};
+  state.people.forEach(p=>{const iv=(p.inviter||"").trim();if(iv)invMap[iv]=(invMap[iv]||0)+1;});
+  const invRows=Object.entries(invMap).map(([k,c])=>({k,c})).sort((a,b)=>b.c-a.c);
+
+  let h=`<div class="strip">
+    <div class="stat"><div class="n">${evs.length}</div><div class="l">イベント数</div></div>
+    <div class="stat"><div class="n">${totalNA}</div><div class="l">のべNA</div></div>
+    <div class="stat"><div class="n">${state.people.length}</div><div class="l">後追い中</div></div>
+  </div>`;
+  h=aiCommentHTML()+podiumHTML(invRows)+h;
+
+  h+=`<section class="block"><div class="block-head"><h2>Ranking</h2><span class="jp">イベント人気ランキング</span></div>`;
+  if(!evs.length){
+    h+=`<div class="empty">まだデータがありません。<br>＋ →「まとめて取り込み」にノートを貼り付けると集計されます。</div>`;
+  }else{
+    h+=`<div class="rank-list">`;
+    evs.forEach((e,i)=>{
+      const w=maxEv?Math.round(e.total/maxEv*100):0;
+      const sub=e.hasMeta?`NA ${e.na||0}・BA ${e.ba||0}${e.head?`　後追い ${e.head}`:""}`:`後追い ${e.head}人`;
+      h+=`<div class="rank-row ${i===0?"top1":""}">
+        <div class="rank-num">${i+1}</div>
+        <div class="rank-main">
+          <div class="rank-name">${esc(e.name)}</div>
+          <div class="rank-sub">${sub}</div>
+          <div class="rank-bar"><span style="width:${w}%"></span></div>
+        </div>
+        <div class="rank-count">${e.total}<small>人</small></div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`</section>`;
+
+  if(invRows.length>3){
+    const maxInv=invRows[0].c;
+    h+=`<section class="block"><div class="block-head"><h2>Mobilizers</h2><span class="jp">動員ランキング（4位〜）</span></div><div class="rank-list">`;
+    invRows.slice(3,11).forEach((r,i)=>{
+      const w=maxInv?Math.round(r.c/maxInv*100):0;
+      h+=`<div class="rank-row">
+        <div class="rank-num">${i+4}</div>
+        <div class="rank-main">
+          <div class="rank-name">${esc(r.k)}</div>
+          <div class="rank-bar"><span style="width:${w}%"></span></div>
+        </div>
+        <div class="rank-count">${r.c}<small>人</small></div>
+      </div>`;
+    });
+    h+=`</div></section>`;
+  }
+
+  h+=`<section class="block"><div class="block-head"><h2>Funnel</h2><span class="jp">後追いステータス分布</span></div><div class="funnel">`;
+  const maxS=Math.max(1,...scs.map(x=>x[1]));
+  scs.forEach(([s,c])=>{
+    const col=colorOf(s);const w=Math.round(c/maxS*100);
+    h+=`<div class="fn-row">
+      <span class="fn-dot" style="background:${col}"></span>
+      <span class="fn-label">${esc(s)}</span>
+      <span class="fn-track"><span style="width:${w}%;background:${col}"></span></span>
+      <span class="fn-n">${c}</span>
+    </div>`;
+  });
+  h+=`</div></section>`;
+  document.getElementById("viewDash").innerHTML=h;
+}
+
+/* ---------- list ---------- */
+function renderList(){
+  const events=[...new Set(state.people.map(p=>p.event||"（未設定）"))];
+  let h=`<div class="filter-scroll">`;
+  h+=`<button class="chip ${filterStatus==="all"&&filterEvent==="all"?"on":""}" onclick="setFilter('all','all')">すべて</button>`;
+  state.statuses.forEach(s=>{
+    h+=`<button class="chip ${filterStatus===s?"on":""}" onclick="setFilter('status','${esc(s).replace(/'/g,"")}')"><span class="cdot" style="background:${colorOf(s)}"></span>${esc(s)}</button>`;
+  });
+  h+=`</div>`;
+  if(events.length>1){
+    h+=`<div class="filter-scroll">`;
+    events.forEach(e=>{h+=`<button class="chip ${filterEvent===e?"on":""}" onclick="setFilter('event',${JSON.stringify(e).replace(/"/g,"&quot;")})">${esc(e)}</button>`;});
+    h+=`</div>`;
+  }
+  h+=`<div class="search-wrap"><input type="text" placeholder="名前で検索" value="${esc(searchText)}" oninput="onSearch(this.value)"></div>`;
+
+  let list=state.people.slice();
+  if(filterStatus!=="all")list=list.filter(p=>p.status===filterStatus);
+  if(filterEvent!=="all")list=list.filter(p=>(p.event||"（未設定）")===filterEvent);
+  if(searchText.trim())list=list.filter(p=>(p.name||"").includes(searchText.trim()));
+  list.sort((a,b)=>(b.updated||0)-(a.updated||0));
+
+  if(!list.length){
+    h+=`<div class="empty"><div class="big">該当なし</div>条件に合う人がいません。</div>`;
+  }else{
+    h+=`<div class="people">`;
+    list.forEach(p=>{
+      const col=colorOf(p.status);
+      const idx=state.statuses.indexOf(p.status);
+      const next=idx>=0&&idx<state.statuses.length-1?state.statuses[idx+1]:null;
+      const steps=state.statuses.map((s,k)=>{
+        const done=idx>=0&&k<=idx;
+        return `<span class="seg${k===idx?" now":""}" style="${done?`background:${colorOf(s)}`:""}"></span>`;
+      }).join("");
+      h+=`<div class="p-card" style="--sc:${col}">
+        <div class="p-row1">
+          <span class="p-name">${esc(p.name)}</span>
+          <span class="p-pill">${esc(p.status)}</span>
+        </div>
+        <div class="p-event"><span class="ev-dot"></span><span class="tag">${esc(p.event||"（未設定）")}</span></div>
+        ${(p.inviter||p.handler)?`<div class="p-meta">${p.inviter?`<span>誘 <b>${esc(p.inviter)}</b></span>`:""}${p.handler?`<span>担 <b>${esc(p.handler)}</b></span>`:""}</div>`:""}
+        <div class="steps">${steps}</div>
+        <div class="p-flow">現在 <b>${esc(p.status)}</b>${next?` <span class="arw">→</span> 次 ${esc(next)}`:` <span class="done-txt">最終段階</span>`}</div>
+        ${p.memo?`<div class="p-memo">${esc(p.memo)}</div>`:""}
+        <div class="p-actions">
+          <button class="adv" ${next?"":"disabled"} onclick="advance('${p.id}')">${next?"次へ進める →":"完了済み"}</button>
+          <button class="ic" onclick="openForm('${p.id}')">編集</button>
+        </div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  document.getElementById("viewList").innerHTML=h;
+}
+function setFilter(type,val){
+  if(type==="all"){filterStatus="all";filterEvent="all";}
+  else if(type==="status"){filterStatus=filterStatus===val?"all":val;}
+  else if(type==="event"){filterEvent=filterEvent===val?"all":val;}
+  renderList();
+}
+function onSearch(v){searchText=v;
+  // keep focus: re-render only the list part would be ideal; simple approach re-renders and refocuses
+  renderList();
+  const inp=document.querySelector(".search-wrap input");if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
+}
+function advance(id){
+  const p=state.people.find(x=>x.id===id);if(!p)return;
+  const i=state.statuses.indexOf(p.status);
+  if(i>=0&&i<state.statuses.length-1){p.status=state.statuses[i+1];p.updated=Date.now();save();render();}
+}
+
+function render(){
+  refreshEventDatalist();
+  if(tab==="dash")renderDash();
+  else if(tab==="analysis")renderAnalysis();
+  else renderList();
+}
+/* ---------- AI counseling comment ---------- */
+function todayStr(){const d=new Date();return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate();}
+function aiCommentHTML(){
+  const c=state.aiComment;
+  if(!c||!c.text)return `<button class="ai-empty" onclick="openAI()">✨ AIカウンセリングを貼り付ける</button>`;
+  return `<div class="ai-card">
+    <div class="ai-head"><span class="ai-badge">✨ AIカウンセリング</span>${c.date?`<span class="ai-date">${esc(c.date)}</span>`:""}<button class="ai-edit" onclick="openAI()">編集</button></div>
+    <div class="ai-body">${esc(c.text).replace(/\n/g,"<br>")}</div>
+  </div>`;
+}
+function openAI(){
+  document.getElementById("aiText").value=(state.aiComment&&state.aiComment.text)||"";
+  document.getElementById("aiClearBtn").style.display=(state.aiComment&&state.aiComment.text)?"":"none";
+  openSheet(document.getElementById("aiSheet"));
+}
+function saveAI(){
+  const t=document.getElementById("aiText").value.trim();
+  if(!t){alert("コメントを入力してください");return;}
+  state.aiComment={text:t,date:todayStr()};
+  save();closeSheets();render();
+}
+function clearAI(){
+  if(!confirm("AIコメントを消しますか？"))return;
+  state.aiComment=null;save();closeSheets();render();
+}
+function buildAnalysisText(){
+  const S=state.statuses,ppl=state.people;
+  if(!ppl.length)return "データがありません。";
+  let th=analysisThreshold;if(th==null||th>=S.length)th=defaultThresholdIndex();
+  const idxOf=p=>S.indexOf(p.status);
+  const reached=p=>{const i=idxOf(p);return i>=0&&i>=th;};
+  const total=ppl.length,rc=ppl.filter(reached).length,rate=total?Math.round(rc/total*100):0;
+  let t=`【後追い分析】\n研修到達率(${S[th]}以降): ${rate}% (${rc}/${total}人)\n\nイベント別到達率:\n`;
+  const ev={};ppl.forEach(p=>{const e=p.event||"（未設定）";(ev[e]=ev[e]||{t:0,r:0});ev[e].t++;if(reached(p))ev[e].r++;});
+  Object.entries(ev).sort((a,b)=>(b[1].r/b[1].t)-(a[1].r/a[1].t)).forEach(([e,v])=>{t+=`・${e}: ${Math.round(v.r/v.t*100)}% (${v.r}/${v.t})\n`;});
+  const draw=eventsAgg().filter(e=>e.na!=null).sort((a,b)=>b.na-a.na);
+  if(draw.length){t+="\n新規集客(NA):\n";draw.forEach(d=>{t+=`・${d.name}: NA ${d.na}${d.ba!=null?" / BA "+d.ba:""}\n`;});}
+  const cum=S.map((s,k)=>ppl.filter(p=>{const i=idxOf(p);return i>=0&&i>=k;}).length);
+  let md=0,ma=-1;for(let k=0;k<S.length-1;k++){const d=cum[k]-cum[k+1];if(d>md){md=d;ma=k;}}
+  if(ma>=0)t+=`\n最大の離脱: ${S[ma]}→${S[ma+1]} で ${md}人\n`;
+  const hm={};ppl.forEach(p=>{const k=p.handler||"（担当なし）";(hm[k]=hm[k]||{t:0,r:0});hm[k].t++;if(reached(p))hm[k].r++;});
+  t+="\n担当別:\n";Object.entries(hm).sort((a,b)=>b[1].t-a[1].t).forEach(([k,v])=>{t+=`・${k}: ${v.t}人 (到達${Math.round(v.r/v.t*100)}%)\n`;});
+  t+="\n↑この数字を見て、集客が強い/弱いイベント、離脱の原因、次の一手を短くアドバイスしてください。";
+  return t;
+}
+function copyAnalysis(){
+  const t=buildAnalysisText();
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>alert("分析データをコピーしました。AIチャットに貼り付けて相談 → 返答をこの枠に貼り付けてください。"),()=>window.prompt("コピーして相談してください",t));}
+  else window.prompt("コピーして相談してください",t);
+}
+function defaultThresholdIndex(){
+  for(const s of ["FT","DLR","マケ","BPC"]){const i=state.statuses.indexOf(s);if(i>=0)return i;}
+  return Math.min(2,state.statuses.length-1);
+}
+function setAnalysisThreshold(i){analysisThreshold=i;renderAnalysis();}
+function renderAnalysis(){
+  const S=state.statuses,ppl=state.people;
+  const box=document.getElementById("viewAnalysis");
+  if(!ppl.length){box.innerHTML=aiCommentHTML()+`<div class="empty"><div class="big">分析するデータがまだありません</div>＋→「まとめて取り込み」でノートを読み込むと、研修到達率や離脱ポイントが出せます。</div>`;return;}
+  if(analysisThreshold==null||analysisThreshold>=S.length)analysisThreshold=defaultThresholdIndex();
+  const th=analysisThreshold,thName=S[th]||"";
+  const idxOf=p=>S.indexOf(p.status);
+  const reached=p=>{const i=idxOf(p);return i>=0&&i>=th;};
+  const total=ppl.length,rc=ppl.filter(reached).length,rate=total?Math.round(rc/total*100):0;
+
+  let h=`<section class="block"><div class="block-head"><h2>Conversion</h2><span class="jp">研修到達率</span></div>`;
+  h=aiCommentHTML()+h;
+  h+=`<div class="an-card"><div class="an-big"><span class="an-rate">${rate}<small>%</small></span><span class="an-cap">${rc} / ${total}人が「${esc(thName)}」以降に到達</span></div>`;
+  h+=`<div class="th-label">研修到達とみなす段階（タップで変更）</div><div class="th-pick">`;
+  S.forEach((s,i)=>{h+=`<button class="th${i>=th?" on":""}" style="${i>=th?`background:${colorOf(s)};border-color:transparent;color:#fff`:""}" onclick="setAnalysisThreshold(${i})">${esc(s)}</button>`;});
+  h+=`</div></div>`;
+
+  const evMap={};
+  ppl.forEach(p=>{const e=p.event||"（未設定）";(evMap[e]=evMap[e]||{t:0,r:0});evMap[e].t++;if(reached(p))evMap[e].r++;});
+  const evRows=Object.entries(evMap).map(([e,v])=>({e,t:v.t,r:v.r,rate:v.t?Math.round(v.r/v.t*100):0})).sort((a,b)=>b.rate-a.rate);
+  h+=`<div class="an-sub">イベント別の到達率</div><div class="rank-list">`;
+  evRows.forEach((r,i)=>{h+=`<div class="rank-row ${i===0?"top1":""}"><div class="rank-main"><div class="rank-name">${esc(r.e)}</div><div class="rank-sub">${r.r}/${r.t}人 到達</div><div class="rank-bar"><span style="width:${r.rate}%"></span></div></div><div class="rank-count">${r.rate}<small>%</small></div></div>`;});
+  h+=`</div></section>`;
+
+  h+=`<section class="block"><div class="block-head"><h2>Drop-off</h2><span class="jp">離脱ポイント</span></div><div class="funnel">`;
+  const cum=S.map((s,k)=>ppl.filter(p=>{const i=idxOf(p);return i>=0&&i>=k;}).length);
+  let maxDrop=0,maxDropAt=-1;
+  for(let k=0;k<S.length-1;k++){const d=cum[k]-cum[k+1];if(d>maxDrop){maxDrop=d;maxDropAt=k;}}
+  S.forEach((s,k)=>{
+    const c=cum[k],w=total?Math.round(c/total*100):0,col=colorOf(s);
+    h+=`<div class="fn-row"><span class="fn-dot" style="background:${col}"></span><span class="fn-label">${esc(s)}</span><span class="fn-track"><span style="width:${w}%;background:${col}"></span></span><span class="fn-n">${c}</span></div>`;
+    if(k===maxDropAt&&maxDrop>0)h+=`<div class="drop-note">▼ ${esc(S[k])}→${esc(S[k+1])} で ${maxDrop}人 離脱（最大）</div>`;
+  });
+  h+=`</div></section>`;
+
+  const draw=eventsAgg().filter(e=>e.na!=null).map(e=>({name:e.name,na:e.na})).sort((a,b)=>b.na-a.na);
+  if(draw.length){
+    const maxNa=Math.max(1,...draw.map(d=>d.na));
+    h+=`<section class="block"><div class="block-head"><h2>Draw</h2><span class="jp">新規集客(NA)ランキング</span></div><div class="rank-list">`;
+    draw.forEach((d,i)=>{const w=Math.round(d.na/maxNa*100);h+=`<div class="rank-row ${i===0?"top1":""}"><div class="rank-num">${i+1}</div><div class="rank-main"><div class="rank-name">${esc(d.name)}</div><div class="rank-bar"><span style="width:${w}%"></span></div></div><div class="rank-count">${d.na}<small>人</small></div></div>`;});
+    h+=`</div></section>`;
+  }
+
+  const hMap={};
+  ppl.forEach(p=>{const k=p.handler||"（担当なし）";(hMap[k]=hMap[k]||{t:0,r:0});hMap[k].t++;if(reached(p))hMap[k].r++;});
+  const hRows=Object.entries(hMap).map(([k,v])=>({k,t:v.t,r:v.r,rate:v.t?Math.round(v.r/v.t*100):0})).sort((a,b)=>b.t-a.t);
+  h+=`<section class="block"><div class="block-head"><h2>Members</h2><span class="jp">担当別の後追い</span></div><div class="rank-list">`;
+  hRows.forEach(r=>{h+=`<div class="rank-row"><div class="rank-main"><div class="rank-name">${esc(r.k)}</div><div class="rank-sub">到達 ${r.r}/${r.t}人・${r.rate}%</div></div><div class="rank-count">${r.t}<small>人</small></div></div>`;});
+  h+=`</div></section>`;
+
+  box.innerHTML=h;
+}
+function refreshEventDatalist(){
+  const dl=document.getElementById("eventList");
+  const evs=[...new Set(state.people.map(p=>p.event).filter(Boolean))];
+  dl.innerHTML=evs.map(e=>`<option value="${esc(e)}">`).join("");
+}
+
+/* ---------- add / edit ---------- */
+function openForm(id){
+  editingId=id||null;
+  const sheet=document.getElementById("formSheet");
+  document.getElementById("formTitle").textContent=id?"編集":"人を追加";
+  document.getElementById("deleteBtn").style.display=id?"":"none";
+  const nameEl=document.getElementById("fName"),evEl=document.getElementById("fEvent"),memoEl=document.getElementById("fMemo"),invEl=document.getElementById("fInviter"),hanEl=document.getElementById("fHandler");
+  if(id){
+    const p=state.people.find(x=>x.id===id);
+    nameEl.value=p.name||"";evEl.value=p.event||"";memoEl.value=p.memo||"";invEl.value=p.inviter||"";hanEl.value=p.handler||"";pickStatus=p.status;
+  }else{
+    nameEl.value="";evEl.value="";memoEl.value="";invEl.value="";hanEl.value="";pickStatus=state.statuses[0];
+  }
+  renderStatusPick();
+  openSheet(sheet);
+}
+function renderStatusPick(){
+  const c=document.getElementById("fStatus");
+  c.innerHTML=state.statuses.map(s=>{
+    const on=s===pickStatus;
+    return `<button class="${on?"on":""}" style="${on?`background:${colorOf(s)}`:""}" onclick="pickStatus='${esc(s).replace(/'/g,"")}';renderStatusPick()">${esc(s)}</button>`;
+  }).join("");
+}
+function savePerson(){
+  const name=document.getElementById("fName").value.trim();
+  const event=document.getElementById("fEvent").value.trim();
+  const memo=document.getElementById("fMemo").value.trim();
+  const inviter=document.getElementById("fInviter").value.trim();
+  const handler=document.getElementById("fHandler").value.trim();
+  if(!name){alert("名前を入れてください");return;}
+  if(!pickStatus||state.statuses.indexOf(pickStatus)<0)pickStatus=state.statuses[0];
+  if(editingId){
+    const p=state.people.find(x=>x.id===editingId);
+    p.name=name;p.event=event;p.memo=memo;p.inviter=inviter;p.handler=handler;p.status=pickStatus;p.updated=Date.now();
+  }else{
+    state.people.push({id:uid(),name,event,memo,inviter,handler,status:pickStatus,created:Date.now(),updated:Date.now()});
+  }
+  save();closeSheets();render();
+}
+function deleteCurrent(){
+  if(!editingId)return;
+  if(!confirm("この人を削除しますか？"))return;
+  state.people=state.people.filter(x=>x.id!==editingId);
+  save();closeSheets();render();
+}
+
+/* ---------- settings / status editor ---------- */
+function openSettings(){
+  renderStEditor();
+  const u=document.getElementById("syncUrl");if(u)u.value=sync.url||"";
+  const k=document.getElementById("syncKey");if(k)k.value=sync.key||"";
+  const rm=document.getElementById("syncRoom");if(rm)rm.value=sync.room||"clavis";
+  setSyncStatus(sync.on?"on":"off",sync.on?"● 同期中":"未接続");
+  openSheet(document.getElementById("setSheet"));
+}
+function renderStEditor(){
+  const c=document.getElementById("stEditor");
+  c.innerHTML=state.statuses.map((s,i)=>`
+    <div class="st-item">
+      <span class="sdot" style="background:${PALETTE[i%PALETTE.length]}"></span>
+      <input type="text" value="${esc(s)}" onchange="renameStatus(${i},this.value)">
+      <button class="mv" onclick="moveStatus(${i},-1)" ${i===0?"disabled":""}>↑</button>
+      <button class="mv" onclick="moveStatus(${i},1)" ${i===state.statuses.length-1?"disabled":""}>↓</button>
+      <button class="del" onclick="removeStatus(${i})" ${state.statuses.length<=1?"disabled":""}>×</button>
+    </div>`).join("");
+}
+function renameStatus(i,val){
+  val=(val||"").trim();if(!val)return renderStEditor();
+  const old=state.statuses[i];
+  if(state.statuses.includes(val)&&val!==old){alert("同じ名前があります");return renderStEditor();}
+  state.statuses[i]=val;
+  state.people.forEach(p=>{if(p.status===old)p.status=val;});
+  save();renderStEditor();
+}
+function moveStatus(i,dir){
+  const j=i+dir;if(j<0||j>=state.statuses.length)return;
+  [state.statuses[i],state.statuses[j]]=[state.statuses[j],state.statuses[i]];
+  save();renderStEditor();render();
+}
+function removeStatus(i){
+  if(state.statuses.length<=1)return;
+  const s=state.statuses[i];
+  const used=state.people.filter(p=>p.status===s).length;
+  if(used>0&&!confirm(`「${s}」には${used}人います。削除すると前の段階に移動します。よろしいですか？`))return;
+  state.statuses.splice(i,1);
+  const fallback=state.statuses[Math.max(0,i-1)];
+  state.people.forEach(p=>{if(p.status===s)p.status=fallback;});
+  save();renderStEditor();render();
+}
+function addStatus(){
+  let n="新規",k=n,c=2;while(state.statuses.includes(k)){k=n+c;c++;}
+  state.statuses.push(k);save();renderStEditor();render();
+}
+function applyDefaultFlow(){
+  if(!confirm("後追いの流れを最新版（イベント動員→CT1→CT2→興味づけ→FT→マケ→PG→DLR→EXP→PA→BPC）に更新します。よろしいですか？"))return;
+  const map={"CT":"CT1"};
+  const newSt=DEFAULT.statuses.slice();
+  state.people.forEach(p=>{if(!newSt.includes(p.status))p.status=map[p.status]||newSt[0];});
+  state.statuses=newSt;
+  save();renderStEditor();render();
+  alert("最新の流れに更新しました");
+}
+
+/* ---------- backup ---------- */
+function exportData(){
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="event-tally-backup.json";document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},100);
+}
+function importData(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const o=JSON.parse(r.result);
+      if(!o.people||!o.statuses)throw 0;
+      if(!confirm("現在のデータを、読み込んだ内容に置き換えます。よろしいですか？"))return;
+      state={statuses:o.statuses,people:o.people};save();renderStEditor();render();
+      alert("読み込みました");
+    }catch(e){alert("ファイルを読み込めませんでした");}
+    ev.target.value="";
+  };
+  r.readAsText(f);
+}
+
+/* ---------- bulk import ---------- */
+function matchStatus(s){
+  const t=(s||"").trim();
+  const hit=state.statuses.find(x=>x===t||x.toLowerCase()===t.toLowerCase());
+  return hit||null;
+}
+function stripPrefix(line){
+  let s=line,prev;
+  do{prev=s;
+    s=s.replace(/^[\s]*(?:[0-9０-９]{1,3}[.\)．）]|[・\-–—•*>»▶▷■□◯○●✔☑✓☆★]+|[①-⑳])\s*/,"");
+  }while(s!==prev);
+  return s.trim();
+}
+function headerName(line){
+  const b=line.match(/^[【\[（(]\s*(.+?)\s*[】\]）)]$/);
+  if(b)return b[1].trim();
+  if(line[0]==="#"||line[0]==="＃")return line.slice(1).trim();
+  const c=line.match(/^(.+?)[：:]\s*$/);
+  if(c)return c[1].trim();
+  return null;
+}
+function isColumnHeader(line){return /誘った人/.test(line)||(/来た人/.test(line)&&/後追い/.test(line));}
+function isEventTitle(line){
+  if(/[→⇒]|->/.test(line))return false;
+  return /イベント/.test(line)||/^\s*\d{1,2}\s*[\/／]\s*\d{1,2}/.test(line);
+}
+function parseNote(rest,cur){
+  const clean=stripEmoji(rest);
+  const mm=clean.match(/^(\S+)\s+([\s\S]*)$/);
+  let name=clean,remainder="";
+  if(mm){name=mm[1];remainder=mm[2].trim();}
+  let handler="",flow="",status=state.statuses[0];
+  if(remainder){
+    const idx=remainder.search(new RegExp(STAGE_RE.source));
+    if(idx>=0){handler=remainder.slice(0,idx).trim();flow=remainder.slice(idx).trim();status=lastStage(flow)||status;}
+    else{handler=remainder;}
+  }
+  if(status==="CT"&&state.statuses.indexOf("CT")<0)status="CT1";
+  const st=flow?(flow.match(STAGE_RE)||[]):[];
+  return {name,event:cur,inviter:"",handler,memo:flow,status,_stages:st};
+}
+function parseBulk(text){
+  const defEvent=(document.getElementById("bulkEvent").value||"").trim();
+  const rows=[];const meta={};const stages=new Set();
+  let cur=defEvent,lastInviter="";
+  const metaFor=e=>{const k=e||"（未設定）";return meta[k]=meta[k]||{};};
+  (text||"").split(/\r?\n/).forEach(raw=>{
+    let line=raw.trim();
+    if(!line)return;
+    if(/^(NA|ＮＡ)\s*数/i.test(line)){metaFor(cur).na=numOf(line);return;}
+    if(/^(BA|ＢＡ)\s*数/i.test(line)){metaFor(cur).ba=numOf(line);return;}
+    if(/^合計/.test(line)&&/\d|[０-９]/.test(line)){metaFor(cur).total=numOf(line);return;}
+    if(isColumnHeader(line))return;
+    const hd=headerName(line);
+    if(hd!==null){cur=hd;lastInviter="";return;}
+    const hasArrow=/[→⇒]|->/.test(line);
+    if(!hasArrow&&isEventTitle(line)){cur=line.trim();lastInviter="";return;}
+    if(hasArrow){
+      let inviter,rest;
+      if(/^\s*[→⇒]/.test(line)){inviter=lastInviter;rest=line.replace(/^\s*[→⇒]\s*/,"");}
+      else{const idx=line.search(/[→⇒]|->/);inviter=stripEmoji(line.slice(0,idx));rest=line.slice(idx).replace(/^([→⇒]|->)\s*/,"");lastInviter=inviter;}
+      const r=parseNote(rest,cur);
+      r.inviter=inviter;
+      r._stages.forEach(s=>stages.add(s));
+      if(r.status)stages.add(r.status);
+      rows.push(r);
+      return;
+    }
+    line=stripPrefix(line);
+    if(!line)return;
+    const parts=line.split(/[\/,，、\t|｜]/).map(x=>x.trim()).filter(Boolean);
+    if(!parts.length)return;
+    let name=parts[0],event=cur||defEvent,status=state.statuses[0];
+    if(parts.length>=3){event=parts[1]||event;status=matchStatus(parts[2])||state.statuses[0];}
+    else if(parts.length===2){const m=matchStatus(parts[1]);if(m){status=m;}else{event=parts[1];}}
+    rows.push({name,event,inviter:"",handler:"",memo:"",status});
+  });
+  return {rows,meta,stages:[...stages]};
+}
+function previewBulk(){
+  const res=parseBulk(document.getElementById("bulkText").value);
+  const rows=res.rows;
+  const metaEntries=Object.entries(res.meta).filter(([,m])=>m.na!=null||m.ba!=null||m.total!=null);
+  const box=document.getElementById("bulkPrev");
+  document.getElementById("bulkCommit").disabled=!rows.length&&!metaEntries.length;
+  if(!rows.length&&!metaEntries.length){box.innerHTML="";return;}
+  let h="";
+  metaEntries.forEach(([e,m])=>{
+    const tot=m.total!=null?m.total:((m.na||0)+(m.ba||0));
+    h+=`<div class="prev-ev">📅 ${esc(e)}　<b>NA ${m.na??"-"} / BA ${m.ba??"-"} / 合計 ${tot}</b></div>`;
+  });
+  if(rows.length){
+    h+=`<div class="bulk-prev-head">${rows.length}人を後追いに取り込みます</div>`;
+    rows.slice(0,60).forEach(r=>{
+      h+=`<div class="prev-row">
+        <span class="pp" style="background:${colorOf(state.statuses.includes(r.status)?r.status:state.statuses[0])}">${esc(r.status)}</span>
+        <span class="pn">${esc(r.name)}</span>
+        <span class="pe">${esc(r.handler?"担 "+r.handler:(r.event||"（未設定）"))}</span>
+      </div>`;
+    });
+    if(rows.length>60)h+=`<div class="prev-row" style="color:var(--ink-soft)">…ほか ${rows.length-60}人</div>`;
+  }
+  box.innerHTML=h;
+}
+function openBulk(){
+  document.getElementById("formSheet").classList.remove("show");
+  document.getElementById("bulkText").value="";
+  document.getElementById("bulkEvent").value="";
+  document.getElementById("bulkPrev").innerHTML="";
+  document.getElementById("bulkCommit").disabled=true;
+  openSheet(document.getElementById("bulkSheet"));
+}
+function commitBulk(){
+  const res=parseBulk(document.getElementById("bulkText").value);
+  const rows=res.rows;
+  const metaEntries=Object.entries(res.meta).filter(([,m])=>m.na!=null||m.ba!=null||m.total!=null);
+  if(!rows.length&&!metaEntries.length)return;
+  STAGE_ORDER.forEach(s=>{if(res.stages.indexOf(s)>=0)ensureStatus(s);});
+  metaEntries.forEach(([e,m])=>{
+    const t=state.eventMeta[e]||{};
+    if(m.na!=null)t.na=m.na;if(m.ba!=null)t.ba=m.ba;if(m.total!=null)t.total=m.total;
+    state.eventMeta[e]=t;
+  });
+  const now=Date.now();
+  rows.forEach((r,i)=>{
+    state.people.push({id:uid(),name:r.name,event:r.event,inviter:r.inviter||"",handler:r.handler||"",memo:r.memo||"",status:state.statuses.includes(r.status)?r.status:state.statuses[0],created:now+i,updated:now+i});
+  });
+  save();closeSheets();render();
+  alert(`${rows.length}人${metaEntries.length?"・"+metaEntries.length+"イベント":""}を取り込みました`);
+}
+
+/* ---------- BA share (serverless snapshot link) ---------- */
+let pendingShare=null;
+function b64enc(str){return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}
+function b64dec(b){b=b.replace(/-/g,"+").replace(/_/g,"/");while(b.length%4)b+="=";return decodeURIComponent(escape(atob(b)));}
+function buildShareURL(){
+  const payload={v:1,s:state.statuses,e:state.eventMeta||{},c:state.aiComment||null,p:state.people.map(p=>({n:p.name,ev:p.event,iv:p.inviter,hd:p.handler,m:p.memo,st:p.status}))};
+  return location.origin+location.pathname+"#s="+b64enc(JSON.stringify(payload));
+}
+function shareLink(){
+  let url;
+  try{url=buildShareURL();}catch(e){alert("リンクの作成に失敗しました");return;}
+  if(url.length>60000){alert("データが大きすぎて共有リンクにできません。バックアップ書き出しで共有してください。");return;}
+  if(navigator.share){navigator.share({title:"イベント集計",text:"最新の集計データです",url:url}).catch(()=>{});return;}
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(()=>alert("共有リンクをコピーしました。LINEなどに貼り付けて送ってください。"),()=>window.prompt("このリンクをコピーして送ってください",url));
+    return;
+  }
+  window.prompt("このリンクをコピーして送ってください",url);
+}
+function checkIncomingShare(){
+  const m=(location.hash||"").match(/^#s=(.+)$/);
+  if(!m)return;
+  try{
+    const obj=JSON.parse(b64dec(m[1]));
+    if(!obj||!Array.isArray(obj.p))return;
+    pendingShare=obj;
+    const evs=obj.e?Object.keys(obj.e).length:0;
+    document.getElementById("shareInSummary").innerHTML=`<b>${obj.p.length}人</b>の後追い・<b>${evs}イベント</b>の集計データが共有されました。`;
+    openSheet(document.getElementById("shareInSheet"));
+  }catch(e){}
+}
+function applyShare(persist){
+  if(!pendingShare)return;
+  if(pendingShare.s&&pendingShare.s.length)state.statuses=pendingShare.s.slice();
+  state.eventMeta=pendingShare.e||{};
+  state.aiComment=pendingShare.c||null;
+  const now=Date.now();
+  state.people=pendingShare.p.map((p,i)=>({id:uid(),name:p.n||"",event:p.ev||"",inviter:p.iv||"",handler:p.hd||"",memo:p.m||"",status:(state.statuses.includes(p.st)?p.st:state.statuses[0]),created:now+i,updated:now+i}));
+  if(persist)save();
+  clearShareHash();
+  pendingShare=null;closeSheets();render();
+  if(persist)alert("取り込みました");
+}
+function dismissShare(){pendingShare=null;clearShareHash();closeSheets();}
+function clearShareHash(){try{history.replaceState(null,"",location.pathname+location.search);}catch(e){location.hash="";}}
+
+/* ---------- cloud sync (Supabase REST) ---------- */
+const SKEY="eventTally_sync";
+let sync={url:"",key:"",room:"clavis",on:false};
+let lastRev=0,pushTimer=null,pollTimer=null,applyingRemote=false,pendingSync=null;
+function loadSync(){try{const r=localStorage.getItem(SKEY);if(r)sync=Object.assign(sync,JSON.parse(r));}catch(e){}}
+function saveSync(){try{localStorage.setItem(SKEY,JSON.stringify(sync));}catch(e){}}
+function setSyncStatus(cls,msg){const el=document.getElementById("syncStatus");if(el)el.textContent=msg;const d=document.getElementById("syncDot");if(d)d.className="sync-dot "+cls;const hd=document.getElementById("syncHeadDot");if(hd)hd.className="sync-dot "+(sync.on?cls:"off");}
+function boardData(){return {statuses:state.statuses,people:state.people,eventMeta:state.eventMeta,aiComment:state.aiComment};}
+function sbHeaders(){return {"apikey":sync.key,"Authorization":"Bearer "+sync.key,"Content-Type":"application/json"};}
+function sbBase(){return sync.url.replace(/\/+$/,"")+"/rest/v1/boards";}
+async function sbGet(){
+  const u=sbBase()+"?id=eq."+encodeURIComponent(sync.room)+"&select=data,rev";
+  const r=await fetch(u,{headers:sbHeaders()});
+  if(!r.ok)throw new Error("読み込み "+r.status);
+  const a=await r.json();return a&&a[0]?a[0]:null;
+}
+async function sbUpsert(rev){
+  const r=await fetch(sbBase()+"?on_conflict=id",{method:"POST",headers:Object.assign(sbHeaders(),{"Prefer":"resolution=merge-duplicates"}),body:JSON.stringify([{id:sync.room,data:boardData(),rev:rev}])});
+  if(!r.ok)throw new Error("保存 "+r.status);
+}
+function adoptBoard(d){
+  if(!d)return;
+  applyingRemote=true;
+  if(d.statuses&&d.statuses.length)state.statuses=d.statuses;
+  state.people=d.people||[];
+  state.eventMeta=d.eventMeta||{};
+  state.aiComment=d.aiComment||null;
+  save();
+  applyingRemote=false;
+  render();
+}
+async function connectSync(){
+  const u=document.getElementById("syncUrl"),k=document.getElementById("syncKey"),rm=document.getElementById("syncRoom");
+  if(u)sync.url=u.value.trim();if(k)sync.key=k.value.trim();if(rm&&rm.value.trim())sync.room=rm.value.trim();
+  if(!sync.url||!sync.key){alert("Project URL と anon キーを入力してください");return;}
+  setSyncStatus("connecting","接続中…");
+  try{
+    const row=await sbGet();
+    if(row){adoptBoard(row.data||{});lastRev=row.rev||0;}
+    else{lastRev=Date.now();await sbUpsert(lastRev);}
+    sync.on=true;saveSync();
+    setSyncStatus("on","● 同期中");
+    startPoll();
+  }catch(e){sync.on=false;setSyncStatus("err","接続エラー");alert("接続に失敗しました（"+e.message+"）\n・URL/キーが正しいか\n・テーブル作成SQLを実行したか\nを確認してください。");}
+}
+function disconnectSync(){sync.on=false;saveSync();stopPoll();setSyncStatus("off","未接続");}
+function startPoll(){stopPoll();pollTimer=setInterval(pollSync,4000);}
+function stopPoll(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+async function pollSync(){
+  if(!sync.on)return;
+  try{const row=await sbGet();if(row&&(row.rev||0)>lastRev){lastRev=row.rev;adoptBoard(row.data||{});}setSyncStatus("on","● 同期中");}
+  catch(e){setSyncStatus("err","接続待ち…");}
+}
+function schedulePush(){
+  if(!sync.on)return;
+  if(pushTimer)clearTimeout(pushTimer);
+  pushTimer=setTimeout(async()=>{
+    try{lastRev=Date.now();await sbUpsert(lastRev);setSyncStatus("on","● 同期済み");}
+    catch(e){setSyncStatus("err","保存待ち…");}
+  },700);
+}
+function shareSyncLink(){
+  if(!sync.url||!sync.key){alert("先に接続を完了してください");return;}
+  const url=location.origin+location.pathname+"#sync="+b64enc(JSON.stringify({u:sync.url,k:sync.key,r:sync.room}));
+  if(navigator.share){navigator.share({title:"チーム共有ボードに参加",url:url}).catch(()=>{});return;}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(url).then(()=>alert("参加リンクをコピーしました。BAに送ってください（開くだけで同期に参加できます）。"),()=>window.prompt("コピーして送ってください",url));return;}
+  window.prompt("コピーして送ってください",url);
+}
+function checkIncomingSync(){
+  const m=(location.hash||"").match(/^#sync=(.+)$/);
+  if(!m)return false;
+  try{const o=JSON.parse(b64dec(m[1]));if(o.u&&o.k){pendingSync=o;openSheet(document.getElementById("syncJoinSheet"));return true;}}catch(e){}
+  return false;
+}
+function acceptSync(){
+  if(!pendingSync)return;
+  sync.url=pendingSync.u;sync.key=pendingSync.k;sync.room=pendingSync.r||"clavis";saveSync();
+  pendingSync=null;clearShareHash();closeSheets();
+  connectSync();
+}
+
+/* ---------- sheet helpers ---------- */
+function openSheet(el){document.getElementById("scrim").classList.add("show");el.classList.add("show");}
+function closeSheets(){
+  document.getElementById("scrim").classList.remove("show");
+  document.getElementById("formSheet").classList.remove("show");
+  document.getElementById("setSheet").classList.remove("show");
+  document.getElementById("bulkSheet").classList.remove("show");
+  document.getElementById("shareInSheet").classList.remove("show");
+  document.getElementById("aiSheet").classList.remove("show");
+  document.getElementById("syncJoinSheet").classList.remove("show");
+}
+function dismissSyncJoin(){pendingSync=null;clearShareHash();closeSheets();}
+loadSync();
+document.getElementById("gearBtn").addEventListener("click",openSettings);
+
+render();
+setSyncStatus(sync.on?"on":"off",sync.on?"● 同期中":"未接続");
+if(!checkIncomingSync()){ checkIncomingShare(); }
+if(sync.on&&sync.url&&sync.key){ setSyncStatus("connecting","接続中…"); startPoll(); pollSync(); }
+</script>
+</body>
+</html>
